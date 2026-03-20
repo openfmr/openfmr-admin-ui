@@ -1,0 +1,147 @@
+/* ==========================================================================
+   OpenFMR Admin UI — Custom Styles
+   ==========================================================================
+   Complements Bootstrap 5 with application‑specific layout, diff styling,
+   and minor visual polish.
+   ========================================================================== */
+
+/* ------------------------------------------------------------------
+   Root variables — easy theming
+   ------------------------------------------------------------------ */
+:root {
+    --diff-add-bg: #d4edda;
+    --diff-add-color: #155724;
+    --diff-del-bg: #f8d7da;
+    --diff-del-color: #721c24;
+    --diff-equal-color: #495057;
+    --panel-max-height: 600px;
+}
+
+/* ------------------------------------------------------------------
+   Body / global
+   ------------------------------------------------------------------ */
+body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    background-color: #f5f7fa;
+    font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+main {
+    flex: 1;
+}
+
+/* ------------------------------------------------------------------
+   Navbar tweaks
+   ------------------------------------------------------------------ */
+.navbar-brand small {
+    font-size: 0.65em;
+    letter-spacing: 0.06em;
+}
+
+/* ------------------------------------------------------------------
+   Conflict table
+   ------------------------------------------------------------------ */
+#conflicts-table code {
+    font-size: 0.8rem;
+    word-break: break-all;
+}
+
+#conflicts-table tbody tr {
+    cursor: default;
+    transition: background-color 0.15s ease;
+}
+
+#conflicts-table tbody tr:hover {
+    background-color: #eef2f7;
+}
+
+/* ------------------------------------------------------------------
+   Diff panels (used on the resolution page)
+   ------------------------------------------------------------------ */
+.diff-panel {
+    max-height: var(--panel-max-height);
+    overflow: auto;
+    margin: 0;
+    padding: 1rem;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background-color: #fdfdfe;
+}
+
+/* ------------------------------------------------------------------
+   jsdiff‑generated line classes
+   ------------------------------------------------------------------ */
+.diff-added {
+    background-color: var(--diff-add-bg);
+    color: var(--diff-add-color);
+}
+
+.diff-removed {
+    background-color: var(--diff-del-bg);
+    color: var(--diff-del-color);
+    text-decoration: line-through;
+}
+
+.diff-equal {
+    color: var(--diff-equal-color);
+}
+
+/* ------------------------------------------------------------------
+   Merge editor textarea
+   ------------------------------------------------------------------ */
+.merge-textarea {
+    font-family: "Cascadia Code", "Fira Code", "Courier New", monospace;
+    font-size: 0.82rem;
+    line-height: 1.6;
+    min-height: 300px;
+    border: none;
+    border-radius: 0;
+    resize: vertical;
+}
+
+.merge-textarea:focus {
+    box-shadow: inset 0 0 0 2px rgba(13, 202, 240, 0.4);
+}
+
+/* ------------------------------------------------------------------
+   Resolution buttons — ensure they are large and visually distinct
+   ------------------------------------------------------------------ */
+#btn-keep-local,
+#btn-accept-master,
+#btn-merge {
+    min-width: 200px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+}
+
+/* ------------------------------------------------------------------
+   Status alert area
+   ------------------------------------------------------------------ */
+#status-alert {
+    transition: opacity 0.3s ease;
+}
+
+#status-alert.alert {
+    display: block !important;
+}
+
+/* ------------------------------------------------------------------
+   Responsive tweaks
+   ------------------------------------------------------------------ */
+@media (max-width: 991.98px) {
+    .diff-panel {
+        max-height: 350px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    #btn-keep-local,
+    #btn-accept-master,
+    #btn-merge {
+        min-width: 100%;
+    }
+}

@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Resolve Conflict — OpenFMR Admin{% endblock %}
+
+{% block head_extra %}
+<!-- jsdiff library for computing text diffs in the browser -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsdiff/5.1.0/diff.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<!-- =======================================================================
+     Conflict Resolution Screen
+     ======================================================================= -->
+
+<!-- Header row with back link and conflict metadata -->
+<div class="row mb-3">
+    <div class="col">
+        <a href="/" class="btn btn-sm btn-outline-secondary mb-2">
+            <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+        <h1 class="h3">
+            <i class="bi bi-journal-code"></i>
+            Conflict Resolution
+        </h1>
+        <p class="text-muted mb-1">
+            <strong>Module:</strong>
+            {% if module == "cr" %}
+                <span class="badge bg-primary">Client Registry</span>
+            {% else %}
+                <span class="badge bg-success">Facility Registry</span>
+            {% endif %}
+            &nbsp;|&nbsp;
+            <strong>Conflict ID:</strong> <code>{{ conflict_id | e }}</code>
+            &nbsp;|&nbsp;
+            <strong>Resource:</strong> {{ conflict.resource_type | e }}
+        </p>
+    </div>
+</div>
+
+<!-- --------------------------------------------------------------------- -->
+<!-- Side‑by‑side JSON diff panels                                         -->
+<!-- --------------------------------------------------------------------- -->
+<div class="row g-3 mb-4">
+    <!-- Local State Panel -->
+    <div class="col-lg-6">
+        <div class="card h-100 border-primary">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-hdd-stack-fill"></i> Local State
+            </div>
+            <div class="card-body p-0">
+                <pre class="diff-panel" id="local-panel">{{ local_state_json }}</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Incoming Master Panel -->
+    <div class="col-lg-6">
+        <div class="card h-100 border-warning">
+            <div class="card-header bg-warning text-dark">
+                <i class="bi bi-cloud-download-fill"></i> Incoming Master
+            </div>
+            <div class="card-body p-0">
+                <pre class="diff-panel" id="incoming-panel">{{ incoming_master_json }}</pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- --------------------------------------------------------------------- -->
+<!-- Unified diff output                                                    -->
+<!-- --------------------------------------------------------------------- -->
+<div class="row mb-4">
+    <div class="col">
+        <div class="card border-secondary">
+            <div class="card-header bg-secondary text-white">
+                <i class="bi bi-file-diff-fill"></i> Unified Diff
+            </div>
+            <div class="card-body p-0">
+                <pre class="diff-panel" id="diff-output"></pre>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- --------------------------------------------------------------------- -->
+<!-- Merge editor (hidden by default — shown when "Merge Manually" is      -->
+<!-- selected)                                                             -->
+<!-- --------------------------------------------------------------------- -->
+<div class="row mb-4 d-none" id="merge-editor-section">
+    <div class="col">
+        <div class="card border-info">
+            <div class="card-header bg-info text-white">
+                <i class="bi bi-pencil-square"></i> Merge Editor
+                <small class="ms-2">— Edit the JSON below and click <em>Submit Merge</em></small>
+            </div>
+            <div class="card-body p-0">
+                <textarea class="form-control merge-textarea" id="merge-editor" rows="20"></textarea>
+            </div>
+            <div class="card-footer text-end">
+                <button class="btn btn-info" id="btn-submit-merge">
+                    <i class="bi bi-check2-all"></i> Submit Merge
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- --------------------------------------------------------------------- -->
+<!-- Resolution action buttons                                             -->
+<!-- --------------------------------------------------------------------- -->
+<div class="row mb-4">
+    <div class="col d-flex flex-wrap gap-2 justify-content-center">
+        <button class="btn btn-lg btn-success" id="btn-keep-local">
+            <i class="bi bi-shield-check"></i> Keep Local Record
+        </button>
+        <button class="btn btn-lg btn-danger" id="btn-accept-master">
+            <i class="bi bi-cloud-check-fill"></i> Accept Incoming Master
+        </button>
+        <button class="btn btn-lg btn-warning text-dark" id="btn-merge">
+            <i class="bi bi-intersect"></i> Merge Manually
+        </button>
+    </div>
+</div>
+
+<!-- --------------------------------------------------------------------- -->
+<!-- Status toast / alert area                                              -->
+<!-- --------------------------------------------------------------------- -->
+<div class="row">
+    <div class="col">
+        <div id="status-alert" class="d-none"></div>
+    </div>
+</div>
+
+<!-- =======================================================================
+     Embedded data for JavaScript (safely escaped via Jinja2)
+     ======================================================================= -->
+<script id="conflict-data" type="application/json">
+{
+    "module": {{ module | tojson }},
+    "conflictId": {{ conflict_id | tojson }},
+    "localStateJson": {{ local_state_json | tojson }},
+    "incomingMasterJson": {{ incoming_master_json | tojson }}
+}
+</script>
+
+{% endblock %}
+
+{% block scripts_extra %}
+<!-- Application‑level JavaScript for diffing and resolution actions -->
+<script src="/static/app.js"></script>
+{% endblock %}

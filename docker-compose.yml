@@ -1,0 +1,33 @@
+# =============================================================================
+# OpenFMR Admin UI - Docker Compose Configuration
+# =============================================================================
+# This file defines the Data Steward Admin UI service for the OpenFMR HIE.
+# It attaches to the shared openfmr_global_net network so it can communicate
+# with the Client Registry and Facility Registry staging databases.
+# =============================================================================
+
+version: "3.9"
+
+services:
+  admin-ui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: openfmr-admin-ui
+    ports:
+      - "8000:8000"
+    environment:
+      # PostgreSQL connection string for the Client Registry staging DB
+      - CR_STAGING_DB_URL=${CR_STAGING_DB_URL}
+      # PostgreSQL connection string for the Facility Registry staging DB
+      - HFR_STAGING_DB_URL=${HFR_STAGING_DB_URL}
+    networks:
+      - openfmr_global_net
+    restart: unless-stopped
+
+# ---------------------------------------------------------------------------
+# External network — must already exist (created by openfmr-core)
+# ---------------------------------------------------------------------------
+networks:
+  openfmr_global_net:
+    external: true
