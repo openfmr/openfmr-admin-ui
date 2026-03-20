@@ -1,13 +1,18 @@
 # =============================================================================
 # OpenFMR Admin UI — Database Access Layer
 # =============================================================================
-# Provides asynchronous functions (via asyncpg) for connecting to both the
-# Client Registry (CR) and Health Facility Registry (HFR) staging databases.
+# Provides asynchronous functions (via asyncpg) for connecting to the
+# Client Registry (CR), Health Facility Registry (HFR), and Health Worker
+# Registry (HWR) staging databases.
 #
-# Each staging database is expected to contain a `conflicts` table with at
-# least the following columns:
+# The CR and HFR databases contain a `conflicts` table, while the HWR
+# database uses a `worker_conflicts` table with slightly different column
+# names.  Queries use SQL aliases to normalise the output so the rest of
+# the application can treat every module identically.
+#
+# Expected columns (after aliasing):
 #   id            UUID PRIMARY KEY
-#   resource_type TEXT            — e.g. "Patient" or "Location"
+#   resource_type TEXT            — e.g. "Patient", "Location", "Practitioner"
 #   status        TEXT            — "pending" | "resolved"
 #   local_state   JSONB           — the current local FHIR resource
 #   incoming      JSONB           — the incoming master FHIR resource
@@ -30,16 +35,26 @@ logger = logging.getLogger("openfmr.admin.database")
 # ---------------------------------------------------------------------------
 CR_STAGING_DB_URL: str = os.getenv("CR_STAGING_DB_URL", "")
 HFR_STAGING_DB_URL: str = os.getenv("HFR_STAGING_DB_URL", "")
+HWR_STAGING_DB_URL: str = os.getenv("HWR_STAGING_DB_URL", "")
+
+# ---------------------------------------------------------------------------
+# Module configuration
+# ---------------------------------------------------------------------------
+# Maps each module key to its environment variable name and DSN value.
+_MODULE_CONFIG: dict[str, dict[str, str]] = {
+    "cr":  {"env_var": "CR_STAGING_DB_URL",  "dsn": CR_STAGING_DB_URL},
+    "hfr": {"env_var": "HFR_STAGING_DB_URL", "dsn": HFR_STAGING_DB_URL},
+    "hwr": {"env_var": "HWR_STAGING_DB_URL", "dsn": HWR_STAGING_DB_URL},
+}
+
+VALID_MODULES = tuple(_MODULE_CONFIG.keys())
 
 
 # ---------------------------------------------------------------------------
 # Connection pool management
 # ---------------------------------------------------------------------------
 # We maintain one pool per staging database so connections are reused.
-_pools: dict[str, asyncpg.Pool | None] = {
-    "cr": None,
-    "hfr": None,
-}
+_pools: dict[str, asyncpg.Pool | None] = {key: None for key in _MODULE_CONFIG}
 
 
 async def _get_pool(module: str) -> asyncpg.Pool:
@@ -49,7 +64,7 @@ async def _get_pool(module: str) -> asyncpg.Pool:
     Parameters
     ----------
     module : str
-        Either ``"cr"`` (Client Registry) or ``"hfr"`` (Health Facility Registry).
+        One of ``"cr"``, ``"hfr"``, or ``"hwr"``.
 
     Raises
     ------
@@ -58,15 +73,17 @@ async def _get_pool(module: str) -> asyncpg.Pool:
     ConnectionError
         If the corresponding database URL is not configured.
     """
-    if module not in ("cr", "hfr"):
-        raise ValueError(f"Unknown module: {module!r}. Expected 'cr' or 'hfr'.")
+    if module not in _MODULE_CONFIG:
+        raise ValueError(
+            f"Unknown module: {module!r}. Expected one of {VALID_MODULES}."
+        )
 
-    dsn = CR_STAGING_DB_URL if module == "cr" else HFR_STAGING_DB_URL
+    cfg = _MODULE_CONFIG[module]
+    dsn = cfg["dsn"]
     if not dsn:
         raise ConnectionError(
             f"Database URL for module '{module}' is not configured. "
-            f"Set the {'CR_STAGING_DB_URL' if module == 'cr' else 'HFR_STAGING_DB_URL'} "
-            f"environment variable."
+            f"Set the {cfg['env_var']} environment variable."
         )
 
     if _pools[module] is None:
@@ -89,6 +106,64 @@ async def close_pools() -> None:
             await pool.close()
             _pools[key] = None
             logger.info("Connection pool closed for module '%s'.", key)
+
+
+# ---------------------------------------------------------------------------
+# SQL helpers — account for schema differences between modules
+# ---------------------------------------------------------------------------
+# CR / HFR use the `conflicts` table; HWR uses `worker_conflicts` with
+# different column names.  We normalise via SQL aliases.
+
+_PENDING_QUERY = {
+    "default": """
+        SELECT id, resource_type, status, local_state, incoming, created_at
+        FROM conflicts
+        WHERE status = 'pending'
+        ORDER BY created_at DESC
+    """,
+    "hwr": """
+        SELECT conflict_id AS id, resource_type, status,
+               local_state_json AS local_state, incoming_state_json AS incoming,
+               created_at
+        FROM worker_conflicts
+        WHERE status = 'pending'
+        ORDER BY created_at DESC
+    """,
+}
+
+_DETAIL_QUERY = {
+    "default": """
+        SELECT id, resource_type, status, local_state, incoming,
+               created_at, resolved_at
+        FROM conflicts
+        WHERE id = $1
+    """,
+    "hwr": """
+        SELECT conflict_id AS id, resource_type, status,
+               local_state_json AS local_state, incoming_state_json AS incoming,
+               created_at, NULL AS resolved_at
+        FROM worker_conflicts
+        WHERE conflict_id = $1
+    """,
+}
+
+_RESOLVE_QUERY = {
+    "default": """
+        UPDATE conflicts
+        SET status = 'resolved', resolved_at = NOW()
+        WHERE id = $1 AND status = 'pending'
+    """,
+    "hwr": """
+        UPDATE worker_conflicts
+        SET status = 'resolved'
+        WHERE conflict_id = $1 AND status = 'pending'
+    """,
+}
+
+
+def _sql(queries: dict[str, str], module: str) -> str:
+    """Return the module-specific SQL, falling back to ``"default"``."""
+    return queries.get(module, queries["default"])
 
 
 # ---------------------------------------------------------------------------
@@ -122,27 +197,20 @@ def _row_to_dict(row: asyncpg.Record, module: str) -> dict[str, Any]:
 
 async def fetch_pending_conflicts() -> list[dict[str, Any]]:
     """
-    Fetch **all** pending (unresolved) conflicts from both staging databases
+    Fetch **all** pending (unresolved) conflicts from every staging database
     and return them as a single aggregated list sorted by ``created_at``
     (newest first).
 
     If a database is unreachable the function logs a warning and continues
-    with the other database so the UI remains partially functional.
+    with the other databases so the UI remains partially functional.
     """
     conflicts: list[dict[str, Any]] = []
 
-    for module in ("cr", "hfr"):
+    for module in VALID_MODULES:
         try:
             pool = await _get_pool(module)
             async with pool.acquire() as conn:
-                rows = await conn.fetch(
-                    """
-                    SELECT id, resource_type, status, local_state, incoming, created_at
-                    FROM conflicts
-                    WHERE status = 'pending'
-                    ORDER BY created_at DESC
-                    """
-                )
+                rows = await conn.fetch(_sql(_PENDING_QUERY, module))
                 conflicts.extend(_row_to_dict(row, module) for row in rows)
         except (ConnectionError, asyncpg.PostgresError) as exc:
             logger.warning(
@@ -167,11 +235,7 @@ async def fetch_conflict_by_id(module: str, conflict_id: str) -> dict[str, Any] 
     pool = await _get_pool(module)
     async with pool.acquire() as conn:
         row = await conn.fetchrow(
-            """
-            SELECT id, resource_type, status, local_state, incoming, created_at, resolved_at
-            FROM conflicts
-            WHERE id = $1
-            """,
+            _sql(_DETAIL_QUERY, module),
             conflict_id,
         )
     if row is None:
@@ -192,11 +256,7 @@ async def resolve_conflict(module: str, conflict_id: str) -> bool:
     pool = await _get_pool(module)
     async with pool.acquire() as conn:
         result = await conn.execute(
-            """
-            UPDATE conflicts
-            SET status = 'resolved', resolved_at = NOW()
-            WHERE id = $1 AND status = 'pending'
-            """,
+            _sql(_RESOLVE_QUERY, module),
             conflict_id,
         )
     # asyncpg returns e.g. "UPDATE 1" — extract the count

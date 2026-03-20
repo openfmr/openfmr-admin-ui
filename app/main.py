@@ -7,6 +7,9 @@
 #   GET  /                         — Dashboard listing pending conflicts
 #   GET  /conflict/{module}/{id}   — Conflict resolution diff screen
 #   POST /resolve/{module}/{id}    — API endpoint to submit a resolution
+#
+# Supported modules: cr (Client Registry), hfr (Health Facility Registry),
+#                    hwr (Health Worker Registry).
 # =============================================================================
 
 import json
@@ -21,6 +24,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 
 from app.database import (
+    VALID_MODULES,
     fetch_pending_conflicts,
     fetch_conflict_by_id,
     resolve_conflict,
@@ -117,8 +121,8 @@ templates.env.filters["json_pretty"] = _json_pretty
 @app.get("/", response_class=HTMLResponse)
 async def dashboard(request: Request):
     """
-    Render the main dashboard showing all pending conflicts from both
-    the CR and HFR staging databases.
+    Render the main dashboard showing all pending conflicts from the
+    CR, HFR, and HWR staging databases.
     """
     try:
         conflicts = await fetch_pending_conflicts()
@@ -146,8 +150,8 @@ async def conflict_detail(request: Request, module: str, conflict_id: str):
     Render the side‑by‑side diff / resolution screen for a specific conflict.
     """
     # Validate module parameter
-    if module not in ("cr", "hfr"):
-        raise HTTPException(status_code=400, detail="Invalid module. Use 'cr' or 'hfr'.")
+    if module not in VALID_MODULES:
+        raise HTTPException(status_code=400, detail=f"Invalid module. Use one of {VALID_MODULES}.")
 
     try:
         conflict = await fetch_conflict_by_id(module, conflict_id)
@@ -195,8 +199,8 @@ async def resolve(module: str, conflict_id: str, payload: ResolutionPayload):
     finalised resource to the respective local HAPI FHIR server.
     """
     # Validate module
-    if module not in ("cr", "hfr"):
-        raise HTTPException(status_code=400, detail="Invalid module. Use 'cr' or 'hfr'.")
+    if module not in VALID_MODULES:
+        raise HTTPException(status_code=400, detail=f"Invalid module. Use one of {VALID_MODULES}.")
 
     # Validate decision value
     valid_decisions = ("accept_master", "keep_local", "merge")
@@ -244,11 +248,12 @@ async def resolve(module: str, conflict_id: str, payload: ResolutionPayload):
     # ------------------------------------------------------------------
     # In production this would be an HTTP PUT/POST to the HAPI FHIR endpoint
     # for the appropriate module.
-    fhir_target = (
-        "http://cr-hapi-fhir:8080/fhir"
-        if module == "cr"
-        else "http://hfr-hapi-fhir:8080/fhir"
-    )
+    _fhir_targets = {
+        "cr":  "http://cr-hapi-fhir:8080/fhir",
+        "hfr": "http://hfr-hapi-fhir:8080/fhir",
+        "hwr": "http://hwr-hapi-fhir:8080/fhir",
+    }
+    fhir_target = _fhir_targets[module]
     logger.info(
         "Simulated forward of resolved resource to %s — decision: %s",
         fhir_target,
