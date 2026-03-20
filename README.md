@@ -2,7 +2,7 @@
 
 **Data Steward Admin Interface** for the [OpenFMR](https://github.com/openfmr) modular Health Information Exchange (HIE).
 
-This lightweight web application lets data stewards review and resolve FHIR resource conflicts that arise when the Client Registry (CR), Health Facility Registry (HFR), and Health Worker Registry (HWR) sync workers detect discrepancies between local and master records.
+This lightweight web application lets data stewards review and resolve FHIR resource conflicts that arise when the Client Registry (CR), Health Facility Registry (HFR), Health Worker Registry (HWR), and Logistics Management Information System (LMIS) sync workers detect discrepancies between local and master records.
 
 ---
 
@@ -14,7 +14,7 @@ This lightweight web application lets data stewards review and resolve FHIR reso
 | Templates | **Jinja2** |
 | Styling | **Bootstrap 5** + plain CSS |
 | Interactivity | **Vanilla JavaScript** + **jsdiff** |
-| Database | **asyncpg** → PostgreSQL (CR, HFR & HWR staging DBs) |
+| Database | **asyncpg** → PostgreSQL (CR, HFR, HWR & LMIS staging DBs) |
 
 > **No React, no heavy frontend frameworks.** This is a single, server-rendered application.
 
@@ -31,7 +31,7 @@ openfmr-admin-ui/
 ├── README.md
 └── app/
     ├── main.py             # FastAPI routes & app setup
-    ├── database.py         # asyncpg access layer (CR + HFR + HWR)
+    ├── database.py         # asyncpg access layer (CR + HFR + HWR + LMIS)
     ├── static/
     │   ├── style.css       # Diff colours, layout polish
     │   └── app.js          # jsdiff rendering, resolution API calls
@@ -49,7 +49,7 @@ openfmr-admin-ui/
 
 ```bash
 cp .env.example .env
-# Edit .env with your CR, HFR, and HWR staging database connection strings.
+# Edit .env with your CR, HFR, HWR, and LMIS staging database connection strings.
 ```
 
 ### 2. Run with Docker Compose
@@ -71,6 +71,7 @@ pip install -r requirements.txt
 export CR_STAGING_DB_URL="postgresql://user:pass@localhost:5432/cr_staging"
 export HFR_STAGING_DB_URL="postgresql://user:pass@localhost:5432/hfr_staging"
 export HWR_STAGING_DB_URL="postgresql://user:pass@localhost:5432/hwr_staging"
+export LMIS_STAGING_DB_URL="postgresql://user:pass@localhost:5432/lmis_staging"
 
 uvicorn app.main:app --reload --port 8000
 ```
@@ -122,6 +123,21 @@ The **HWR** staging database uses a `worker_conflicts` table:
 
 ```sql
 CREATE TABLE worker_conflicts (
+    conflict_id         UUID PRIMARY KEY,
+    resource_type       VARCHAR(64) NOT NULL,
+    identifier_system   TEXT NOT NULL,
+    identifier_value    TEXT NOT NULL,
+    status              VARCHAR(20) NOT NULL DEFAULT 'pending',
+    local_state_json    JSONB NOT NULL,
+    incoming_state_json JSONB NOT NULL,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+```
+
+The **LMIS** staging database uses a `supply_conflicts` table:
+
+```sql
+CREATE TABLE supply_conflicts (
     conflict_id         UUID PRIMARY KEY,
     resource_type       VARCHAR(64) NOT NULL,
     identifier_system   TEXT NOT NULL,

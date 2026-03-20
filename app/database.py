@@ -5,10 +5,11 @@
 # Client Registry (CR), Health Facility Registry (HFR), and Health Worker
 # Registry (HWR) staging databases.
 #
-# The CR and HFR databases contain a `conflicts` table, while the HWR
-# database uses a `worker_conflicts` table with slightly different column
-# names.  Queries use SQL aliases to normalise the output so the rest of
-# the application can treat every module identically.
+# The CR and HFR databases contain a `conflicts` table, the HWR
+# database uses a `worker_conflicts` table, and the LMIS database
+# uses a `supply_conflicts` table with slightly different column names.
+# Queries use SQL aliases to normalise the output so the rest of the
+# application can treat every module identically.
 #
 # Expected columns (after aliasing):
 #   id            UUID PRIMARY KEY
@@ -36,6 +37,7 @@ logger = logging.getLogger("openfmr.admin.database")
 CR_STAGING_DB_URL: str = os.getenv("CR_STAGING_DB_URL", "")
 HFR_STAGING_DB_URL: str = os.getenv("HFR_STAGING_DB_URL", "")
 HWR_STAGING_DB_URL: str = os.getenv("HWR_STAGING_DB_URL", "")
+LMIS_STAGING_DB_URL: str = os.getenv("LMIS_STAGING_DB_URL", "")
 
 # ---------------------------------------------------------------------------
 # Module configuration
@@ -45,6 +47,7 @@ _MODULE_CONFIG: dict[str, dict[str, str]] = {
     "cr":  {"env_var": "CR_STAGING_DB_URL",  "dsn": CR_STAGING_DB_URL},
     "hfr": {"env_var": "HFR_STAGING_DB_URL", "dsn": HFR_STAGING_DB_URL},
     "hwr": {"env_var": "HWR_STAGING_DB_URL", "dsn": HWR_STAGING_DB_URL},
+    "lmis": {"env_var": "LMIS_STAGING_DB_URL", "dsn": LMIS_STAGING_DB_URL},
 }
 
 VALID_MODULES = tuple(_MODULE_CONFIG.keys())
@@ -111,8 +114,9 @@ async def close_pools() -> None:
 # ---------------------------------------------------------------------------
 # SQL helpers — account for schema differences between modules
 # ---------------------------------------------------------------------------
-# CR / HFR use the `conflicts` table; HWR uses `worker_conflicts` with
-# different column names.  We normalise via SQL aliases.
+# CR / HFR use the `conflicts` table; HWR uses `worker_conflicts` and
+# LMIS uses `supply_conflicts` with different column names. We normalise
+# via SQL aliases.
 
 _PENDING_QUERY = {
     "default": """
@@ -126,6 +130,14 @@ _PENDING_QUERY = {
                local_state_json AS local_state, incoming_state_json AS incoming,
                created_at
         FROM worker_conflicts
+        WHERE status = 'pending'
+        ORDER BY created_at DESC
+    """,
+    "lmis": """
+        SELECT conflict_id AS id, resource_type, status,
+               local_state_json AS local_state, incoming_state_json AS incoming,
+               created_at
+        FROM supply_conflicts
         WHERE status = 'pending'
         ORDER BY created_at DESC
     """,
@@ -145,6 +157,13 @@ _DETAIL_QUERY = {
         FROM worker_conflicts
         WHERE conflict_id = $1
     """,
+    "lmis": """
+        SELECT conflict_id AS id, resource_type, status,
+               local_state_json AS local_state, incoming_state_json AS incoming,
+               created_at, NULL AS resolved_at
+        FROM supply_conflicts
+        WHERE conflict_id = $1
+    """,
 }
 
 _RESOLVE_QUERY = {
@@ -155,6 +174,11 @@ _RESOLVE_QUERY = {
     """,
     "hwr": """
         UPDATE worker_conflicts
+        SET status = 'resolved'
+        WHERE conflict_id = $1 AND status = 'pending'
+    """,
+    "lmis": """
+        UPDATE supply_conflicts
         SET status = 'resolved'
         WHERE conflict_id = $1 AND status = 'pending'
     """,

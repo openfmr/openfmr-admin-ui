@@ -26,6 +26,10 @@
             <strong>Module:</strong>
             {% if module == "cr" %}
                 <span class="badge bg-primary">Client Registry</span>
+            {% elif module == "hwr" %}
+                <span class="badge bg-danger">Health Worker Registry</span>
+            {% elif module == "lmis" %}
+                <span class="badge bg-info text-dark">Supply Chain / LMIS</span>
             {% else %}
                 <span class="badge bg-success">Facility Registry</span>
             {% endif %}

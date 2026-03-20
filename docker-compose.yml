@@ -3,8 +3,8 @@
 # =============================================================================
 # This file defines the Data Steward Admin UI service for the OpenFMR HIE.
 # It attaches to the shared openfmr_global_net network so it can communicate
-# with the Client Registry, Facility Registry, and Health Worker Registry
-# staging databases.
+# with the Client Registry, Facility Registry, Health Worker Registry, and
+# Logistics Management Information System (LMIS) staging databases.
 # =============================================================================
 
 version: "3.9"
@@ -24,6 +24,8 @@ services:
       - HFR_STAGING_DB_URL=${HFR_STAGING_DB_URL}
       # PostgreSQL connection string for the Health Worker Registry staging DB
       - HWR_STAGING_DB_URL=${HWR_STAGING_DB_URL}
+      # PostgreSQL connection string for the LMIS staging DB
+      - LMIS_STAGING_DB_URL=${LMIS_STAGING_DB_URL}
     networks:
       - openfmr_global_net
     restart: unless-stopped

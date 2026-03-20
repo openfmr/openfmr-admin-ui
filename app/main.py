@@ -9,7 +9,8 @@
 #   POST /resolve/{module}/{id}    — API endpoint to submit a resolution
 #
 # Supported modules: cr (Client Registry), hfr (Health Facility Registry),
-#                    hwr (Health Worker Registry).
+#                    hwr (Health Worker Registry), lmis (Logistics Management
+#                    Information System).
 # =============================================================================
 
 import json
@@ -122,7 +123,7 @@ templates.env.filters["json_pretty"] = _json_pretty
 async def dashboard(request: Request):
     """
     Render the main dashboard showing all pending conflicts from the
-    CR, HFR, and HWR staging databases.
+    CR, HFR, HWR, and LMIS staging databases.
     """
     try:
         conflicts = await fetch_pending_conflicts()
@@ -252,6 +253,7 @@ async def resolve(module: str, conflict_id: str, payload: ResolutionPayload):
         "cr":  "http://cr-hapi-fhir:8080/fhir",
         "hfr": "http://hfr-hapi-fhir:8080/fhir",
         "hwr": "http://hwr-hapi-fhir:8080/fhir",
+        "lmis": "http://lmis-hapi-fhir:8080/fhir",
     }
     fhir_target = _fhir_targets[module]
     logger.info(
